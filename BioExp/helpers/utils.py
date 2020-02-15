@@ -33,8 +33,9 @@ def _normalize(slice):
     if np.std(slice)==0 or np.std(image_nonzero) == 0:
         return slice
     else:
-        tmp= (slice - np.mean(image_nonzero)) / np.std(image_nonzero)
+        # tmp= (slice - np.mean(image_nonzero)) / np.std(image_nonzero)
         # tmp[tmp==tmp.min()]=-9
+        tmp = (slice - np.min(image_nonzero))/(np.max(image_nonzero) - np.min(image_nonzero))
         return tmp
 
 def load_vol_brats( rootpath, 
@@ -49,7 +50,6 @@ def load_vol_brats( rootpath,
         pad : number of pixels to be padded
                 in X, Y direction
     """
-
     flair = glob( rootpath + '/*_flair.nii.gz')
     t2 = glob( rootpath + '/*_t2.nii.gz')
     gt = glob( rootpath + '/*_seg.nii.gz')
@@ -69,8 +69,9 @@ def load_vol_brats( rootpath,
     test_image = np.transpose(test_image,(0,2,3,1))
 
     if pad:
-        npad = ((pad, pad), (pad, pad), (0, 0), (0, 0))
-        test_image = np.pad(test_image, pad_width=npad, mode='constant', constant_values=0)
+        npad = ((0,0), (pad, pad), (pad, pad), (0, 0))
+
+        test_image = np.pad(test_image, pad_width=npad, mode='constant', constant_values=test_image.min())
 
     if not slicen == -1:
         test_image = np.array(test_image[slicen])
@@ -81,11 +82,12 @@ def load_vol_brats( rootpath,
         gt[gt == 4] = 3
 
         if pad:
-            npad  = ((pad, pad), (pad, pad), (0, 0))
+            npad  = ((0,0), (pad, pad), (pad, pad))
             gt    = np.pad(gt, pad_width=npad, mode='constant', constant_values=0)
         if not slicen == -1:
             gt  = np.array(gt[slicen])
         return test_image, gt
+
 
     except:
         return test_image
@@ -190,16 +192,29 @@ def predict_volume_brats(model, test_image, show=False):
     return np.array(prediction), np.array(prediction_probs)
 
 
-def load_numpy_slice(img_path, mask_path=None, seq='t1'):
+def load_numpy_slice(img_path, mask_path=None, seq='all', pad = 0):
     """
     """
-    seq_map = {'flair': 0, 't1': 1, 't2': 3, 't1c':2}
+    seq_map = {'flair': 0, 't1': 1, 't2': 3, 't1c':2, 'all':[0, 1, 2, 3]}
+
     seq = seq_map[seq] 
     img = np.load(img_path)
+    img = img[:,:,seq]
+    if len(img.shape) == 2:
+        img = img[..., None]
+        if pad:
+            npad = ((pad, pad), (pad, pad), (0, 0))
+            img  = np.pad(img, pad_width=npad, mode='constant', constant_values=0)
+        return img
+
     if mask_path:
-        mask = np.load(mask_path)
-        return img[:, :, seq][..., None], mask[...,None]
-    return img[:, :, seq][..., None]
+        mask = np.load(mask_path)[...,None]
+        if pad:
+            npad = ((pad, pad), (pad, pad), (0, 0))
+            img  = np.pad(img, pad_width=npad, mode='constant', constant_values=0)
+            mask  = np.pad(mask, pad_width=npad, mode='constant', constant_values=0)
+        return img, mask
+
 
 
 def load_images(img_path, normalize=True, zscore=False, mask=True):
